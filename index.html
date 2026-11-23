@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Điều khiển 3 máy bơm</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 16px;
+    }
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 8px 0 14px;
+      text-align: center;
+    }
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e293b;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f59e0b;
+      flex-shrink: 0;
+    }
+    .dot.ok { background: #22c55e; }
+    .dot.err { background: #ef4444; }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pump-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .pump-sub {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    .badge-on { color: #4ade80; font-weight: 700; }
+    .badge-off { color: #94a3b8; font-weight: 600; }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      min-width: 96px;
+      transition: opacity 0.15s;
+    }
+    button:active { opacity: 0.8; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-turn-on { background: #22c55e; color: #052e16; }
+    .btn-turn-off { background: #ef4444; color: #ffffff; }
+
+    .btn-all-off {
+      width: 100%;
+      margin-top: 8px;
+      padding: 14px;
+      background: #334155;
+      color: #f8fafc;
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Hệ thống 3 máy bơm</h1>
+
+    <div class="status-bar">
+      <div id="statusDot" class="dot"></div>
+      <div id="statusText">Đang kết nối máy chủ MQTT...</div>
+    </div>
+
+    <div id="pumpList"></div>
+
+    <button id="allOffBtn" class="btn-all-off" onclick="turnOffAll()" disabled>
+      TẮT TẤT CẢ MÁY BƠM
+    </button>
+  </div>
+
+  <script>
+    // ====== 1.
