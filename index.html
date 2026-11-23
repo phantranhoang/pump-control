@@ -109,4 +109,119 @@
   </div>
 
   <script>
-    // ====== 1.
+    // ====== 1. ĐIỀN USER VÀ PASS MQTT CỦA BẠN VÀO 2 DÒNG DƯỚI ======
+    const WSS_URL   = "wss://r714f791.ala.asia-southeast1.emqxsl.com:8084/mqtt";
+    const MQTT_USER = "USER_CUA_BAN";
+    const MQTT_PASS = "PASS_CUA_BAN";
+
+    // ====== 2. TOPIC ĐIỀU KHIỂN & TRẠNG THÁI 3 MÁY BƠM ======
+    const PUMPS = [
+      { id: 1, name: "Máy bơm 1", cmdTopic: "pump/1/cmd", stateTopic: "pump/1/state", state: "OFF" },
+      { id: 2, name: "Máy bơm 2", cmdTopic: "pump/2/cmd", stateTopic: "pump/2/state", state: "OFF" },
+      { id: 3, name: "Máy bơm 3", cmdTopic: "pump/3/cmd", stateTopic: "pump/3/state", state: "OFF" }
+    ];
+
+    let isConnected = false;
+
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const pumpListEl = document.getElementById("pumpList");
+    const allOffBtn = document.getElementById("allOffBtn");
+
+    function renderPumps() {
+      pumpListEl.innerHTML = "";
+      PUMPS.forEach((p) => {
+        const isOn = p.state === "ON";
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <div>
+            <div class="pump-title">${p.name}</div>
+            <div class="pump-sub">Trạng thái: <span class="${isOn ? "badge-on" : "badge-off"}">${isOn ? "ĐANG BẬT" : "ĐANG TẮT"}</span></div>
+          </div>
+          <button
+            class="${isOn ? "btn-turn-off" : "btn-turn-on"}"
+            ${isConnected ? "" : "disabled"}
+            onclick="togglePump(${p.id})"
+          >
+            ${isOn ? "TẮT" : "BẬT"}
+          </button>
+        `;
+        pumpListEl.appendChild(card);
+      });
+      allOffBtn.disabled = !isConnected;
+    }
+
+    function setStatus(state, text) {
+      statusDot.className = "dot" + (state === "ok" ? " ok" : state === "err" ? " err" : "");
+      statusText.textContent = text;
+    }
+
+    renderPumps();
+
+    const clientId = "web_pump_" + Math.random().toString(16).slice(2, 10);
+    const client = mqtt.connect(WSS_URL, {
+      clientId,
+      username: MQTT_USER,
+      password: MQTT_PASS,
+      clean: true,
+      reconnectPeriod: 3000,
+      connectTimeout: 10000
+    });
+
+    client.on("connect", () => {
+      isConnected = true;
+      setStatus("ok", "Đã kết nối - Sẵn sàng điều khiển");
+      renderPumps();
+      PUMPS.forEach((p) => {
+        client.subscribe(p.stateTopic, { qos: 1 });
+      });
+    });
+
+    client.on("reconnect", () => {
+      isConnected = false;
+      setStatus("", "Đang kết nối lại máy chủ MQTT...");
+      renderPumps();
+    });
+
+    client.on("error", (err) => {
+      isConnected = false;
+      setStatus("err", "Lỗi kết nối MQTT: " + (err && err.message ? err.message : "Không thể kết nối"));
+      renderPumps();
+    });
+
+    client.on("close", () => {
+      isConnected = false;
+      renderPumps();
+    });
+
+    client.on("message", (topic, payload) => {
+      const msg = payload.toString().trim().toUpperCase();
+      const pump = PUMPS.find((p) => p.stateTopic === topic);
+      if (pump && (msg === "ON" || msg === "OFF")) {
+        pump.state = msg;
+        renderPumps();
+      }
+    });
+
+    function togglePump(id) {
+      if (!isConnected) return;
+      const pump = PUMPS.find((p) => p.id === id);
+      if (!pump) return;
+      const nextState = pump.state === "ON" ? "OFF" : "ON";
+      client.publish(pump.cmdTopic, nextState, { qos: 1 });
+      pump.state = nextState;
+      renderPumps();
+    }
+
+    function turnOffAll() {
+      if (!isConnected) return;
+      PUMPS.forEach((p) => {
+        client.publish(p.cmdTopic, "OFF", { qos: 1 });
+        p.state = "OFF";
+      });
+      renderPumps();
+    }
+  </script>
+</body>
+</html>
