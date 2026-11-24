@@ -3,102 +3,334 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Điều khiển 3 máy bơm</title>
+  <title>Bảng điều khiển 3 máy bơm</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
+    :root {
+      --bg-main: #0b1120;
+      --bg-card: #131c31;
+      --bg-sub: #0f172a;
+      --border: #24324d;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-blue: #38bdf8;
+      --green: #22c55e;
+      --green-dark: #15803d;
+      --red: #ef4444;
+      --amber: #f59e0b;
+    }
+
     * { box-sizing: border-box; }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f172a;
-      color: #f8fafc;
+      background: radial-gradient(circle at top, #16233d 0%, var(--bg-main) 65%);
+      color: var(--text-main);
       margin: 0;
-      padding: 16px;
+      padding: 16px 14px 32px;
+      min-height: 100vh;
     }
+
     .container {
-      max-width: 480px;
+      max-width: 560px;
       margin: 0 auto;
     }
-    h1 {
-      font-size: 22px;
-      margin: 8px 0 14px;
+
+    .header {
       text-align: center;
+      margin-bottom: 14px;
     }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 4px 0;
+      letter-spacing: 0.3px;
+      color: #ffffff;
+    }
+
+    .clock-text {
+      font-size: 13px;
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
     .status-bar {
       display: flex;
       align-items: center;
-      gap: 8px;
-      background: #1e293b;
-      padding: 12px 14px;
+      justify-content: space-between;
+      gap: 10px;
+      background: rgba(19, 28, 49, 0.9);
+      padding: 11px 14px;
       border-radius: 12px;
-      font-size: 14px;
+      font-size: 13.5px;
       margin-bottom: 16px;
-      border: 1px solid #334155;
+      border: 1px solid var(--border);
     }
+
+    .status-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
     .dot {
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background: #f59e0b;
+      background: var(--amber);
+      box-shadow: 0 0 8px var(--amber);
       flex-shrink: 0;
     }
-    .dot.ok { background: #22c55e; }
-    .dot.err { background: #ef4444; }
+    .dot.ok {
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+    .dot.err {
+      background: var(--red);
+      box-shadow: 0 0 8px var(--red);
+    }
 
-    .card {
-      background: #1e293b;
-      border: 1px solid #334155;
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 12px;
+    .pump-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: 16px;
+      padding: 15px;
+      margin-bottom: 14px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .pump-card.is-on {
+      border-color: rgba(34, 197, 94, 0.65);
+      box-shadow: 0 8px 22px rgba(34, 197, 94, 0.12);
+    }
+
+    .pump-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .pump-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .pump-img {
+      width: 66px;
+      height: 66px;
+      object-fit: cover;
+      border-radius: 12px;
+      border: 1.5px solid #334155;
+      background: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .pump-name {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .state-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .state-pill.on {
+      background: rgba(34, 197, 94, 0.16);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+
+    .state-pill.off {
+      background: rgba(148, 163, 184, 0.12);
+      color: #94a3b8;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .volt-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent-blue);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .btn-power {
+      border: none;
+      border-radius: 12px;
+      padding: 13px 18px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      min-width: 96px;
+      flex-shrink: 0;
+      letter-spacing: 0.4px;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+
+    .btn-power:active { transform: scale(0.97); }
+    .btn-power:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-on {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #052e16;
+      box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+    }
+
+    .btn-off {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    }
+
+    /* Khu vực hẹn giờ */
+    .timer-section {
+      margin-top: 13px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--border);
+      background: var(--bg-sub);
+      border-radius: 12px;
+      padding: 11px 12px;
+    }
+
+    .timer-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-    .pump-title {
-      font-size: 18px;
+      margin-bottom: 8px;
+      font-size: 12.5px;
+      color: var(--text-muted);
       font-weight: 600;
     }
-    .pump-sub {
-      font-size: 13px;
-      color: #94a3b8;
-      margin-top: 4px;
-    }
-    .badge-on { color: #4ade80; font-weight: 700; }
-    .badge-off { color: #94a3b8; font-weight: 600; }
 
-    button {
+    .timer-status {
+      color: #fbbf24;
+      font-size: 12px;
+    }
+
+    .timer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 9px;
+    }
+
+    .time-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .time-field label {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .time-field input[type="time"] {
+      width: 100%;
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 7px 9px;
+      font-size: 14px;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .time-field input[type="time"]:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .timer-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-small {
+      flex: 1;
       border: none;
-      border-radius: 10px;
-      padding: 12px 20px;
-      font-size: 15px;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12.5px;
       font-weight: 700;
       cursor: pointer;
-      min-width: 96px;
-      transition: opacity 0.15s;
     }
-    button:active { opacity: 0.8; }
-    button:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    .btn-turn-on { background: #22c55e; color: #052e16; }
-    .btn-turn-off { background: #ef4444; color: #ffffff; }
+    .btn-save-timer {
+      background: #0284c7;
+      color: #ffffff;
+    }
+
+    .btn-clear-timer {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid #334155;
+    }
 
     .btn-all-off {
       width: 100%;
-      margin-top: 8px;
+      margin-top: 6px;
       padding: 14px;
-      background: #334155;
-      color: #f8fafc;
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      border-radius: 14px;
+      background: linear-gradient(135deg, #334155, #1e293b);
+      color: #fca5a5;
       font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      cursor: pointer;
+    }
+
+    .btn-all-off:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .note-box {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.45;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Hệ thống 3 máy bơm</h1>
+    <div class="header">
+      <h1>HỆ THỐNG ĐIỀU KHIỂN 3 MÁY BƠM</h1>
+      <div id="liveClock" class="clock-text">--:--:--</div>
+    </div>
 
     <div class="status-bar">
-      <div id="statusDot" class="dot"></div>
-      <div id="statusText">Đang kết nối máy chủ MQTT...</div>
+      <div class="status-left">
+        <div id="statusDot" class="dot"></div>
+        <div id="statusText">Đang kết nối máy chủ MQTT...</div>
+      </div>
     </div>
 
     <div id="pumpList"></div>
@@ -106,19 +338,59 @@
     <button id="allOffBtn" class="btn-all-off" onclick="turnOffAll()" disabled>
       TẮT TẤT CẢ MÁY BƠM
     </button>
+
+    <div class="note-box">
+      Giữ trang web mở trên điện thoại hoặc máy tính để lịch hẹn giờ tự động gửi lệnh đúng giờ.
+    </div>
   </div>
 
   <script>
-    // ====== 1. ĐIỀN USER VÀ PASS MQTT CỦA BẠN VÀO 2 DÒNG DƯỚI ======
+    // ====== 1. CẤU HÌNH MQTT ======
     const WSS_URL   = "wss://r714f791.ala.asia-southeast1.emqxsl.com:8084/mqtt";
     const MQTT_USER = "hoang";
     const MQTT_PASS = "0974266";
 
-    // ====== 2. TOPIC ĐIỀU KHIỂN & TRẠNG THÁI 3 MÁY BƠM ======
+    // ====== 2. DANH SÁCH 3 MÁY BƠM ======
     const PUMPS = [
-      { id: 1, name: "Máy bơm 1", cmdTopic: "pump/1/cmd", stateTopic: "pump/1/state", state: "OFF" },
-      { id: 2, name: "Máy bơm 2", cmdTopic: "pump/2/cmd", stateTopic: "pump/2/state", state: "OFF" },
-      { id: 3, name: "Máy bơm 3", cmdTopic: "pump/3/cmd", stateTopic: "pump/3/state", state: "OFF" }
+      {
+        id: 1,
+        name: "Máy bơm 1",
+        img: "./pump.jpg",
+        cmdTopic: "pump/1/cmd",
+        stateTopic: "pump/1/state",
+        voltTopic: "pump/1/volt",
+        state: "OFF",
+        voltage: null,
+        onTime: "",
+        offTime: "",
+        lastTriggeredMinute: ""
+      },
+      {
+        id: 2,
+        name: "Máy bơm 2",
+        img: "./pump.jpg",
+        cmdTopic: "pump/2/cmd",
+        stateTopic: "pump/2/state",
+        voltTopic: "pump/2/volt",
+        state: "OFF",
+        voltage: null,
+        onTime: "",
+        offTime: "",
+        lastTriggeredMinute: ""
+      },
+      {
+        id: 3,
+        name: "Máy bơm 3",
+        img: "./pump.jpg",
+        cmdTopic: "pump/3/cmd",
+        stateTopic: "pump/3/state",
+        voltTopic: "pump/3/volt",
+        state: "OFF",
+        voltage: null,
+        onTime: "",
+        offTime: "",
+        lastTriggeredMinute: ""
+      }
     ];
 
     let isConnected = false;
@@ -127,28 +399,94 @@
     const statusText = document.getElementById("statusText");
     const pumpListEl = document.getElementById("pumpList");
     const allOffBtn = document.getElementById("allOffBtn");
+    const liveClockEl = document.getElementById("liveClock");
+
+    // Khôi phục lịch hẹn giờ đã lưu trên trình duyệt
+    function loadSavedTimers() {
+      try {
+        const raw = localStorage.getItem("pump_timers_v1");
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        PUMPS.forEach((p) => {
+          if (saved[p.id]) {
+            p.onTime = saved[p.id].onTime || "";
+            p.offTime = saved[p.id].offTime || "";
+          }
+        });
+      } catch (e) {}
+    }
+
+    function persistTimers() {
+      const data = {};
+      PUMPS.forEach((p) => {
+        data[p.id] = { onTime: p.onTime, offTime: p.offTime };
+      });
+      localStorage.setItem("pump_timers_v1", JSON.stringify(data));
+    }
+
+    function formatTimerSummary(p) {
+      const parts = [];
+      if (p.onTime) parts.push("Bật " + p.onTime);
+      if (p.offTime) parts.push("Tắt " + p.offTime);
+      return parts.length ? parts.join(" • ") : "Chưa đặt hẹn giờ";
+    }
 
     function renderPumps() {
       pumpListEl.innerHTML = "";
       PUMPS.forEach((p) => {
         const isOn = p.state === "ON";
+        const voltText = (p.voltage !== null && p.voltage !== "") ? `${p.voltage} V` : "-- V";
+
         const card = document.createElement("div");
-        card.className = "card";
+        card.className = "pump-card" + (isOn ? " is-on" : "");
         card.innerHTML = `
-          <div>
-            <div class="pump-title">${p.name}</div>
-            <div class="pump-sub">Trạng thái: <span class="${isOn ? "badge-on" : "badge-off"}">${isOn ? "ĐANG BẬT" : "ĐANG TẮT"}</span></div>
+          <div class="pump-top">
+            <div class="pump-info">
+              <img src="${p.img}" alt="${p.name}" class="pump-img" />
+              <div>
+                <div class="pump-name">${p.name}</div>
+                <div class="badges">
+                  <span class="state-pill ${isOn ? "on" : "off"}">
+                    ${isOn ? "● ĐANG BẬT" : "○ ĐANG TẮT"}
+                  </span>
+                  <span class="volt-box" id="volt-${p.id}">⚡ ${voltText}</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              class="btn-power ${isOn ? "btn-off" : "btn-on"}"
+              ${isConnected ? "" : "disabled"}
+              onclick="togglePump(${p.id})"
+            >
+              ${isOn ? "TẮT" : "BẬT"}
+            </button>
           </div>
-          <button
-            class="${isOn ? "btn-turn-off" : "btn-turn-on"}"
-            ${isConnected ? "" : "disabled"}
-            onclick="togglePump(${p.id})"
-          >
-            ${isOn ? "TẮT" : "BẬT"}
-          </button>
+
+          <div class="timer-section">
+            <div class="timer-header">
+              <span>Hẹn giờ tự động</span>
+              <span class="timer-status" id="timer-label-${p.id}">${formatTimerSummary(p)}</span>
+            </div>
+            <div class="timer-grid">
+              <div class="time-field">
+                <label for="on-time-${p.id}">Giờ BẬT</label>
+                <input type="time" id="on-time-${p.id}" value="${p.onTime}" />
+              </div>
+              <div class="time-field">
+                <label for="off-time-${p.id}">Giờ TẮT</label>
+                <input type="time" id="off-time-${p.id}" value="${p.offTime}" />
+              </div>
+            </div>
+            <div class="timer-actions">
+              <button class="btn-small btn-save-timer" onclick="saveTimer(${p.id})">Lưu hẹn giờ</button>
+              <button class="btn-small btn-clear-timer" onclick="clearTimer(${p.id})">Xóa hẹn giờ</button>
+            </div>
+          </div>
         `;
         pumpListEl.appendChild(card);
       });
+
       allOffBtn.disabled = !isConnected;
     }
 
@@ -157,8 +495,10 @@
       statusText.textContent = text;
     }
 
+    loadSavedTimers();
     renderPumps();
 
+    // ====== 3. KẾT NỐI MQTT ======
     const clientId = "web_pump_" + Math.random().toString(16).slice(2, 10);
     const client = mqtt.connect(WSS_URL, {
       clientId,
@@ -171,10 +511,11 @@
 
     client.on("connect", () => {
       isConnected = true;
-      setStatus("ok", "Đã kết nối - Sẵn sàng điều khiển");
+      setStatus("ok", "Đã kết nối • Sẵn sàng điều khiển");
       renderPumps();
       PUMPS.forEach((p) => {
         client.subscribe(p.stateTopic, { qos: 1 });
+        client.subscribe(p.voltTopic, { qos: 0 });
       });
     });
 
@@ -186,7 +527,7 @@
 
     client.on("error", (err) => {
       isConnected = false;
-      setStatus("err", "Lỗi kết nối MQTT: " + (err && err.message ? err.message : "Không thể kết nối"));
+      setStatus("err", "Lỗi kết nối: " + (err && err.message ? err.message : "Không thể kết nối"));
       renderPumps();
     });
 
@@ -196,22 +537,46 @@
     });
 
     client.on("message", (topic, payload) => {
-      const msg = payload.toString().trim().toUpperCase();
-      const pump = PUMPS.find((p) => p.stateTopic === topic);
-      if (pump && (msg === "ON" || msg === "OFF")) {
-        pump.state = msg;
-        renderPumps();
+      const raw = payload.toString().trim();
+
+      // Cập nhật trạng thái ON/OFF
+      const pumpState = PUMPS.find((p) => p.stateTopic === topic);
+      if (pumpState) {
+        const msg = raw.toUpperCase();
+        if (msg === "ON" || msg === "OFF") {
+          pumpState.state = msg;
+          renderPumps();
+        }
+        return;
+      }
+
+      // Cập nhật điện áp từng bơm
+      const pumpVolt = PUMPS.find((p) => p.voltTopic === topic);
+      if (pumpVolt) {
+        const num = parseFloat(raw);
+        pumpVolt.voltage = isNaN(num) ? raw : num.toFixed(1);
+        const voltEl = document.getElementById(`volt-${pumpVolt.id}`);
+        if (voltEl) {
+          voltEl.textContent = `⚡ ${pumpVolt.voltage} V`;
+        }
       }
     });
 
-    function togglePump(id) {
+    // ====== 4. ĐIỀU KHIỂN & HẸN GIỜ ======
+    function sendPumpCmd(id, cmd) {
       if (!isConnected) return;
       const pump = PUMPS.find((p) => p.id === id);
       if (!pump) return;
-      const nextState = pump.state === "ON" ? "OFF" : "ON";
-      client.publish(pump.cmdTopic, nextState, { qos: 1 });
-      pump.state = nextState;
+      client.publish(pump.cmdTopic, cmd, { qos: 1 });
+      pump.state = cmd;
       renderPumps();
+    }
+
+    function togglePump(id) {
+      const pump = PUMPS.find((p) => p.id === id);
+      if (!pump) return;
+      const nextState = pump.state === "ON" ? "OFF" : "ON";
+      sendPumpCmd(id, nextState);
     }
 
     function turnOffAll() {
@@ -222,6 +587,59 @@
       });
       renderPumps();
     }
+
+    function saveTimer(id) {
+      const pump = PUMPS.find((p) => p.id === id);
+      if (!pump) return;
+      const onInput = document.getElementById(`on-time-${id}`);
+      const offInput = document.getElementById(`off-time-${id}`);
+      pump.onTime = onInput ? onInput.value : "";
+      pump.offTime = offInput ? offInput.value : "";
+      pump.lastTriggeredMinute = "";
+      persistTimers();
+
+      const label = document.getElementById(`timer-label-${id}`);
+      if (label) label.textContent = formatTimerSummary(pump);
+    }
+
+    function clearTimer(id) {
+      const pump = PUMPS.find((p) => p.id === id);
+      if (!pump) return;
+      pump.onTime = "";
+      pump.offTime = "";
+      pump.lastTriggeredMinute = "";
+      persistTimers();
+      renderPumps();
+    }
+
+    // Đồng hồ thời gian thực & kiểm tra hẹn giờ mỗi giây
+    function updateClockAndTimers() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
+      const currentHHMM = `${hh}:${mm}`;
+      const minuteKey = `${now.toDateString()}_${currentHHMM}`;
+
+      liveClockEl.textContent = `Thời gian hiện tại: ${hh}:${mm}:${ss}`;
+
+      if (!isConnected) return;
+
+      PUMPS.forEach((p) => {
+        if (p.lastTriggeredMinute === minuteKey) return;
+
+        if (p.onTime && p.onTime === currentHHMM) {
+          p.lastTriggeredMinute = minuteKey;
+          sendPumpCmd(p.id, "ON");
+        } else if (p.offTime && p.offTime === currentHHMM) {
+          p.lastTriggeredMinute = minuteKey;
+          sendPumpCmd(p.id, "OFF");
+        }
+      });
+    }
+
+    setInterval(updateClockAndTimers, 1000);
+    updateClockAndTimers();
   </script>
 </body>
 </html>
