@@ -64,7 +64,7 @@
       padding: 11px 14px;
       border-radius: 12px;
       font-size: 13px;
-      margin-bottom: 10px;
+      margin-bottom: 14px;
       border: 1px solid var(--border);
     }
 
@@ -89,43 +89,6 @@
     .dot.err {
       background: var(--red);
       box-shadow: 0 0 8px var(--red);
-    }
-
-    .esp-badge {
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.3px;
-    }
-
-    .esp-badge.online {
-      background: rgba(34, 197, 94, 0.16);
-      color: #4ade80;
-      border: 1px solid rgba(34, 197, 94, 0.45);
-    }
-
-    .esp-badge.offline {
-      background: rgba(239, 68, 68, 0.16);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.45);
-    }
-
-    .toast-alert {
-      display: none;
-      background: rgba(239, 68, 68, 0.18);
-      border: 1px solid rgba(239, 68, 68, 0.6);
-      color: #fecaca;
-      padding: 10px 13px;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 14px;
-      text-align: center;
-    }
-
-    .toast-alert.show {
-      display: block;
     }
 
     .pump-card {
@@ -229,11 +192,7 @@
     }
 
     .btn-power:active { transform: scale(0.97); }
-
-    .btn-power.locked {
-      opacity: 0.42;
-      cursor: not-allowed;
-    }
+    .btn-power:disabled { opacity: 0.45; cursor: not-allowed; }
 
     .btn-on {
       background: linear-gradient(135deg, #22c55e, #16a34a);
@@ -370,8 +329,8 @@
       cursor: pointer;
     }
 
-    .btn-all-off.locked {
-      opacity: 0.42;
+    .btn-all-off:disabled {
+      opacity: 0.45;
       cursor: not-allowed;
     }
 
@@ -396,14 +355,11 @@
         <div id="statusDot" class="dot"></div>
         <div id="statusText">Đang kết nối máy chủ MQTT...</div>
       </div>
-      <div id="espBadge" class="esp-badge offline">○ ESP32: OFFLINE</div>
     </div>
-
-    <div id="toastAlert" class="toast-alert"></div>
 
     <div id="pumpList"></div>
 
-    <button id="allOffBtn" class="btn-all-off locked" onclick="turnOffAll()">
+    <button id="allOffBtn" class="btn-all-off" onclick="turnOffAll()" disabled>
       TẮT TẤT CẢ MÁY BƠM
     </button>
 
@@ -413,11 +369,10 @@
   </div>
 
   <script>
-    const WSS_URL          = "wss://r714f791.ala.asia-southeast1.emqxsl.com:8084/mqtt";
-    const MQTT_USER        = "hoang";
-    const MQTT_PASS        = "0974266";
-    const ESP_STATUS_TOPIC = "esp32/status";
-    const SCHEDULE_TOPIC   = "pump/schedule/set";
+    const WSS_URL        = "wss://r714f791.ala.asia-southeast1.emqxsl.com:8084/mqtt";
+    const MQTT_USER      = "hoang";
+    const MQTT_PASS      = "0974266";
+    const SCHEDULE_TOPIC = "pump/schedule/set";
 
     const DAY_OPTIONS = [
       { code: 1, label: "T2" },
@@ -472,45 +427,12 @@
     ];
 
     let isMqttConnected = false;
-    let isEspOnline = false;
-    let toastTimer = null;
 
     const statusDot = document.getElementById("statusDot");
     const statusText = document.getElementById("statusText");
-    const espBadge = document.getElementById("espBadge");
-    const toastAlert = document.getElementById("toastAlert");
     const pumpListEl = document.getElementById("pumpList");
     const allOffBtn = document.getElementById("allOffBtn");
     const liveClockEl = document.getElementById("liveClock");
-
-    function canControlEsp() {
-      return isMqttConnected && isEspOnline;
-    }
-
-    function showOfflineNotice(msg) {
-      toastAlert.textContent = msg || "Thiết bị ESP32 đang OFFLINE, không thể điều khiển lúc này.";
-      toastAlert.classList.add("show");
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        toastAlert.classList.remove("show");
-      }, 3500);
-    }
-
-    function renderEspStatus() {
-      if (isEspOnline && isMqttConnected) {
-        espBadge.className = "esp-badge online";
-        espBadge.textContent = "● ESP32: ONLINE";
-        toastAlert.classList.remove("show");
-      } else {
-        espBadge.className = "esp-badge offline";
-        espBadge.textContent = "○ ESP32: OFFLINE";
-      }
-      if (canControlEsp()) {
-        allOffBtn.classList.remove("locked");
-      } else {
-        allOffBtn.classList.add("locked");
-      }
-    }
 
     function loadSavedTimers() {
       try {
@@ -561,7 +483,6 @@
     }
 
     function renderPumps() {
-      const controlReady = canControlEsp();
       pumpListEl.innerHTML = "";
 
       PUMPS.forEach((p) => {
@@ -592,7 +513,8 @@
 
             <button
               type="button"
-              class="btn-power ${isOn ? "btn-off" : "btn-on"} ${controlReady ? "" : "locked"}"
+              class="btn-power ${isOn ? "btn-off" : "btn-on"}"
+              ${isMqttConnected ? "" : "disabled"}
               onclick="togglePump(${p.id})"
             >
               ${isOn ? "TẮT" : "BẬT"}
@@ -624,7 +546,7 @@
         pumpListEl.appendChild(card);
       });
 
-      renderEspStatus();
+      allOffBtn.disabled = !isMqttConnected;
     }
 
     function setStatus(state, text) {
@@ -648,9 +570,7 @@
     client.on("connect", () => {
       isMqttConnected = true;
       setStatus("ok", "Đã kết nối máy chủ MQTT");
-      renderEspStatus();
       renderPumps();
-      client.subscribe(ESP_STATUS_TOPIC, { qos: 1 });
       PUMPS.forEach((p) => {
         client.subscribe(p.stateTopic, { qos: 1 });
         client.subscribe(p.voltTopic, { qos: 0 });
@@ -660,44 +580,25 @@
     client.on("reconnect", () => {
       isMqttConnected = false;
       setStatus("", "Đang kết nối lại máy chủ MQTT...");
-      renderEspStatus();
       renderPumps();
     });
 
     client.on("error", (err) => {
       isMqttConnected = false;
-      isEspOnline = false;
       setStatus("err", "Lỗi kết nối: " + (err && err.message ? err.message : "Không thể kết nối"));
-      renderEspStatus();
       renderPumps();
     });
 
     client.on("close", () => {
       isMqttConnected = false;
-      isEspOnline = false;
-      renderEspStatus();
       renderPumps();
     });
 
     client.on("message", (topic, payload) => {
       const raw = payload.toString().trim();
 
-      if (topic === ESP_STATUS_TOPIC) {
-        const st = raw.toUpperCase();
-        if (st === "ONLINE" || st === "1" || st === "TRUE") {
-          isEspOnline = true;
-        } else if (st === "OFFLINE" || st === "0" || st === "FALSE") {
-          isEspOnline = false;
-        }
-        renderEspStatus();
-        renderPumps();
-        return;
-      }
-
       const pumpState = PUMPS.find((p) => p.stateTopic === topic);
       if (pumpState) {
-        isEspOnline = true;
-        renderEspStatus();
         const msg = raw.toUpperCase();
         if (msg === "ON" || msg === "OFF") {
           pumpState.state = msg;
@@ -708,8 +609,6 @@
 
       const pumpVolt = PUMPS.find((p) => p.voltTopic === topic);
       if (pumpVolt) {
-        isEspOnline = true;
-        renderEspStatus();
         const num = parseFloat(raw);
         pumpVolt.voltage = isNaN(num) ? raw : num.toFixed(1);
         const voltEl = document.getElementById(`volt-${pumpVolt.id}`);
@@ -732,10 +631,7 @@
     }
 
     function togglePump(id) {
-      if (!canControlEsp()) {
-        showOfflineNotice("Thiết bị ESP32 đang OFFLINE, không thể Bật/Tắt bơm lúc này.");
-        return;
-      }
+      if (!isMqttConnected) return;
       const pump = PUMPS.find((p) => p.id === id);
       if (!pump) return;
       const nextState = pump.state === "ON" ? "OFF" : "ON";
@@ -745,10 +641,7 @@
     }
 
     function turnOffAll() {
-      if (!canControlEsp()) {
-        showOfflineNotice("Thiết bị ESP32 đang OFFLINE, không thể tắt tất cả máy bơm.");
-        return;
-      }
+      if (!isMqttConnected) return;
       PUMPS.forEach((p) => {
         client.publish(p.cmdTopic, "OFF", { qos: 1 });
         p.state = "OFF";
@@ -769,10 +662,6 @@
       persistTimers();
       pushScheduleToEsp(pump);
       renderPumps();
-
-      if (!isEspOnline) {
-        showOfflineNotice("Đã lưu lịch trên web. Khi ESP32 ONLINE trở lại (hoặc nếu đã gửi trước đó), ESP32 sẽ tự chạy đúng giờ.");
-      }
     }
 
     function clearTimer(id) {
