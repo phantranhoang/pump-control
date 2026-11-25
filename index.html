@@ -666,6 +666,7 @@
 
     client.on("error", (err) => {
       isMqttConnected = false;
+      isEspOnline = false;
       setStatus("err", "Lỗi kết nối: " + (err && err.message ? err.message : "Không thể kết nối"));
       renderEspStatus();
       renderPumps();
@@ -673,6 +674,7 @@
 
     client.on("close", () => {
       isMqttConnected = false;
+      isEspOnline = false;
       renderEspStatus();
       renderPumps();
     });
@@ -682,13 +684,16 @@
 
       if (topic === ESP_STATUS_TOPIC) {
         const st = raw.toUpperCase();
-        isEspOnline = (st === "ONLINE" || st === "1" || st === "TRUE");
+        if (st === "ONLINE" || st === "1" || st === "TRUE") {
+          isEspOnline = true;
+        } else if (st === "OFFLINE" || st === "0" || st === "FALSE") {
+          isEspOnline = false;
+        }
         renderEspStatus();
         renderPumps();
         return;
       }
 
-      // Nhận trạng thái bơm hoặc điện áp từ ESP32 -> xác nhận ESP32 đang ONLINE
       const pumpState = PUMPS.find((p) => p.stateTopic === topic);
       if (pumpState) {
         isEspOnline = true;
