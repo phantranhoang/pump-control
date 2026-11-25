@@ -26,7 +26,7 @@
       background: radial-gradient(circle at top, #16233d 0%, var(--bg-main) 65%);
       color: var(--text-main);
       margin: 0;
-      padding: 16px 14px 32px;
+      padding: 16px 14px 36px;
       min-height: 100vh;
     }
 
@@ -64,7 +64,7 @@
       padding: 11px 14px;
       border-radius: 12px;
       font-size: 13px;
-      margin-bottom: 16px;
+      margin-bottom: 10px;
       border: 1px solid var(--border);
     }
 
@@ -109,6 +109,23 @@
       background: rgba(239, 68, 68, 0.16);
       color: #f87171;
       border: 1px solid rgba(239, 68, 68, 0.45);
+    }
+
+    .toast-alert {
+      display: none;
+      background: rgba(239, 68, 68, 0.18);
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      color: #fecaca;
+      padding: 10px 13px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    .toast-alert.show {
+      display: block;
     }
 
     .pump-card {
@@ -212,7 +229,11 @@
     }
 
     .btn-power:active { transform: scale(0.97); }
-    .btn-power:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-power.locked {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
 
     .btn-on {
       background: linear-gradient(135deg, #22c55e, #16a34a);
@@ -349,8 +370,8 @@
       cursor: pointer;
     }
 
-    .btn-all-off:disabled {
-      opacity: 0.45;
+    .btn-all-off.locked {
+      opacity: 0.42;
       cursor: not-allowed;
     }
 
@@ -375,25 +396,28 @@
         <div id="statusDot" class="dot"></div>
         <div id="statusText">Đang kết nối máy chủ MQTT...</div>
       </div>
-      <div id="espBadge" class="esp-badge offline">ESP32: OFFLINE</div>
+      <div id="espBadge" class="esp-badge offline">○ ESP32: OFFLINE</div>
     </div>
+
+    <div id="toastAlert" class="toast-alert"></div>
 
     <div id="pumpList"></div>
 
-    <button id="allOffBtn" class="btn-all-off" onclick="turnOffAll()" disabled>
+    <button id="allOffBtn" class="btn-all-off locked" onclick="turnOffAll()">
       TẮT TẤT CẢ MÁY BƠM
     </button>
 
     <div class="note-box">
-      Chọn ngày (T2–CN) và giờ Bật/Tắt rồi bấm <b>Lưu hẹn giờ</b>. Giữ trang web mở để tự động gửi lệnh đúng giờ.
+      Bấm <b>Lưu hẹn giờ</b> để gửi lịch xuống ESP32 lưu tự chạy — thoát web thiết bị vẫn tự bật/tắt đúng giờ.
     </div>
   </div>
 
   <script>
-    const WSS_URL   = "wss://r714f791.ala.asia-southeast1.emqxsl.com:8084/mqtt";
-    const MQTT_USER = "hoang";
-    const MQTT_PASS = "0974266";
+    const WSS_URL          = "wss://r714f791.ala.asia-southeast1.emqxsl.com:8084/mqtt";
+    const MQTT_USER        = "hoang";
+    const MQTT_PASS        = "0974266";
     const ESP_STATUS_TOPIC = "esp32/status";
+    const SCHEDULE_TOPIC   = "pump/schedule/set";
 
     const DAY_OPTIONS = [
       { code: 1, label: "T2" },
@@ -417,8 +441,7 @@
         voltage: null,
         onTime: "",
         offTime: "",
-        days: [1, 2, 3, 4, 5, 6, 0],
-        lastTriggeredMinute: ""
+        days: [1, 2, 3, 4, 5, 6, 0]
       },
       {
         id: 2,
@@ -431,8 +454,7 @@
         voltage: null,
         onTime: "",
         offTime: "",
-        days: [1, 2, 3, 4, 5, 6, 0],
-        lastTriggeredMinute: ""
+        days: [1, 2, 3, 4, 5, 6, 0]
       },
       {
         id: 3,
@@ -445,40 +467,54 @@
         voltage: null,
         onTime: "",
         offTime: "",
-        days: [1, 2, 3, 4, 5, 6, 0],
-        lastTriggeredMinute: ""
+        days: [1, 2, 3, 4, 5, 6, 0]
       }
     ];
 
-    let isConnected = false;
+    let isMqttConnected = false;
     let isEspOnline = false;
-    let lastEspSeenMs = 0;
+    let toastTimer = null;
 
     const statusDot = document.getElementById("statusDot");
     const statusText = document.getElementById("statusText");
     const espBadge = document.getElementById("espBadge");
+    const toastAlert = document.getElementById("toastAlert");
     const pumpListEl = document.getElementById("pumpList");
     const allOffBtn = document.getElementById("allOffBtn");
     const liveClockEl = document.getElementById("liveClock");
 
+    function canControlEsp() {
+      return isMqttConnected && isEspOnline;
+    }
+
+    function showOfflineNotice(msg) {
+      toastAlert.textContent = msg || "Thiết bị ESP32 đang OFFLINE, không thể điều khiển lúc này.";
+      toastAlert.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastAlert.classList.remove("show");
+      }, 3500);
+    }
+
     function renderEspStatus() {
-      if (!isConnected) {
-        espBadge.className = "esp-badge offline";
-        espBadge.textContent = "ESP32: CHƯA RÕ";
-        return;
-      }
-      if (isEspOnline) {
+      if (isEspOnline && isMqttConnected) {
         espBadge.className = "esp-badge online";
         espBadge.textContent = "● ESP32: ONLINE";
+        toastAlert.classList.remove("show");
       } else {
         espBadge.className = "esp-badge offline";
         espBadge.textContent = "○ ESP32: OFFLINE";
+      }
+      if (canControlEsp()) {
+        allOffBtn.classList.remove("locked");
+      } else {
+        allOffBtn.classList.add("locked");
       }
     }
 
     function loadSavedTimers() {
       try {
-        const raw = localStorage.getItem("pump_timers_v2");
+        const raw = localStorage.getItem("pump_timers_v3");
         if (!raw) return;
         const saved = JSON.parse(raw);
         PUMPS.forEach((p) => {
@@ -496,7 +532,7 @@
       PUMPS.forEach((p) => {
         data[p.id] = { onTime: p.onTime, offTime: p.offTime, days: p.days };
       });
-      localStorage.setItem("pump_timers_v2", JSON.stringify(data));
+      localStorage.setItem("pump_timers_v3", JSON.stringify(data));
     }
 
     function formatDaysText(days) {
@@ -525,7 +561,9 @@
     }
 
     function renderPumps() {
+      const controlReady = canControlEsp();
       pumpListEl.innerHTML = "";
+
       PUMPS.forEach((p) => {
         const isOn = p.state === "ON";
         const voltText = (p.voltage !== null && p.voltage !== "") ? `${p.voltage} V` : "-- V";
@@ -553,8 +591,8 @@
             </div>
 
             <button
-              class="btn-power ${isOn ? "btn-off" : "btn-on"}"
-              ${isConnected ? "" : "disabled"}
+              type="button"
+              class="btn-power ${isOn ? "btn-off" : "btn-on"} ${controlReady ? "" : "locked"}"
               onclick="togglePump(${p.id})"
             >
               ${isOn ? "TẮT" : "BẬT"}
@@ -563,7 +601,7 @@
 
           <div class="timer-section">
             <div class="timer-header">
-              <span>Hẹn giờ theo ngày / tuần</span>
+              <span>Hẹn giờ trên ESP32</span>
               <span class="timer-status" id="timer-label-${p.id}">${formatTimerSummary(p)}</span>
             </div>
             <div class="days-row">${daysHtml}</div>
@@ -578,15 +616,15 @@
               </div>
             </div>
             <div class="timer-actions">
-              <button class="btn-small btn-save-timer" onclick="saveTimer(${p.id})">Lưu hẹn giờ</button>
-              <button class="btn-small btn-clear-timer" onclick="clearTimer(${p.id})">Xóa hẹn giờ</button>
+              <button type="button" class="btn-small btn-save-timer" onclick="saveTimer(${p.id})">Lưu hẹn giờ</button>
+              <button type="button" class="btn-small btn-clear-timer" onclick="clearTimer(${p.id})">Xóa hẹn giờ</button>
             </div>
           </div>
         `;
         pumpListEl.appendChild(card);
       });
 
-      allOffBtn.disabled = !isConnected;
+      renderEspStatus();
     }
 
     function setStatus(state, text) {
@@ -596,7 +634,6 @@
 
     loadSavedTimers();
     renderPumps();
-    renderEspStatus();
 
     const clientId = "web_pump_" + Math.random().toString(16).slice(2, 10);
     const client = mqtt.connect(WSS_URL, {
@@ -609,10 +646,10 @@
     });
 
     client.on("connect", () => {
-      isConnected = true;
-      setStatus("ok", "Đã kết nối • Sẵn sàng điều khiển");
-      renderPumps();
+      isMqttConnected = true;
+      setStatus("ok", "Đã kết nối máy chủ MQTT");
       renderEspStatus();
+      renderPumps();
       client.subscribe(ESP_STATUS_TOPIC, { qos: 1 });
       PUMPS.forEach((p) => {
         client.subscribe(p.stateTopic, { qos: 1 });
@@ -621,23 +658,23 @@
     });
 
     client.on("reconnect", () => {
-      isConnected = false;
+      isMqttConnected = false;
       setStatus("", "Đang kết nối lại máy chủ MQTT...");
-      renderPumps();
       renderEspStatus();
+      renderPumps();
     });
 
     client.on("error", (err) => {
-      isConnected = false;
+      isMqttConnected = false;
       setStatus("err", "Lỗi kết nối: " + (err && err.message ? err.message : "Không thể kết nối"));
-      renderPumps();
       renderEspStatus();
+      renderPumps();
     });
 
     client.on("close", () => {
-      isConnected = false;
-      renderPumps();
+      isMqttConnected = false;
       renderEspStatus();
+      renderPumps();
     });
 
     client.on("message", (topic, payload) => {
@@ -646,15 +683,16 @@
       if (topic === ESP_STATUS_TOPIC) {
         const st = raw.toUpperCase();
         isEspOnline = (st === "ONLINE" || st === "1" || st === "TRUE");
-        if (isEspOnline) {
-          lastEspSeenMs = Date.now();
-        }
         renderEspStatus();
+        renderPumps();
         return;
       }
 
+      // Nhận trạng thái bơm hoặc điện áp từ ESP32 -> xác nhận ESP32 đang ONLINE
       const pumpState = PUMPS.find((p) => p.stateTopic === topic);
       if (pumpState) {
+        isEspOnline = true;
+        renderEspStatus();
         const msg = raw.toUpperCase();
         if (msg === "ON" || msg === "OFF") {
           pumpState.state = msg;
@@ -665,11 +703,8 @@
 
       const pumpVolt = PUMPS.find((p) => p.voltTopic === topic);
       if (pumpVolt) {
-        if (isConnected) {
-          isEspOnline = true;
-          lastEspSeenMs = Date.now();
-          renderEspStatus();
-        }
+        isEspOnline = true;
+        renderEspStatus();
         const num = parseFloat(raw);
         pumpVolt.voltage = isNaN(num) ? raw : num.toFixed(1);
         const voltEl = document.getElementById(`volt-${pumpVolt.id}`);
@@ -679,24 +714,36 @@
       }
     });
 
-    function sendPumpCmd(id, cmd) {
-      if (!isConnected) return;
-      const pump = PUMPS.find((p) => p.id === id);
-      if (!pump) return;
-      client.publish(pump.cmdTopic, cmd, { qos: 1 });
-      pump.state = cmd;
-      renderPumps();
+    function pushScheduleToEsp(pump) {
+      if (!isMqttConnected) return;
+      const daysArr = (!pump.days || pump.days.length === 0) ? [1, 2, 3, 4, 5, 6, 0] : pump.days;
+      const payload = JSON.stringify({
+        id: pump.id,
+        on: pump.onTime || "",
+        off: pump.offTime || "",
+        days: daysArr
+      });
+      client.publish(SCHEDULE_TOPIC, payload, { qos: 1, retain: true });
     }
 
     function togglePump(id) {
+      if (!canControlEsp()) {
+        showOfflineNotice("Thiết bị ESP32 đang OFFLINE, không thể Bật/Tắt bơm lúc này.");
+        return;
+      }
       const pump = PUMPS.find((p) => p.id === id);
       if (!pump) return;
       const nextState = pump.state === "ON" ? "OFF" : "ON";
-      sendPumpCmd(id, nextState);
+      client.publish(pump.cmdTopic, nextState, { qos: 1 });
+      pump.state = nextState;
+      renderPumps();
     }
 
     function turnOffAll() {
-      if (!isConnected) return;
+      if (!canControlEsp()) {
+        showOfflineNotice("Thiết bị ESP32 đang OFFLINE, không thể tắt tất cả máy bơm.");
+        return;
+      }
       PUMPS.forEach((p) => {
         client.publish(p.cmdTopic, "OFF", { qos: 1 });
         p.state = "OFF";
@@ -714,9 +761,13 @@
       if (!pump.days || pump.days.length === 0) {
         pump.days = [1, 2, 3, 4, 5, 6, 0];
       }
-      pump.lastTriggeredMinute = "";
       persistTimers();
+      pushScheduleToEsp(pump);
       renderPumps();
+
+      if (!isEspOnline) {
+        showOfflineNotice("Đã lưu lịch trên web. Khi ESP32 ONLINE trở lại (hoặc nếu đã gửi trước đó), ESP32 sẽ tự chạy đúng giờ.");
+      }
     }
 
     function clearTimer(id) {
@@ -725,48 +776,22 @@
       pump.onTime = "";
       pump.offTime = "";
       pump.days = [1, 2, 3, 4, 5, 6, 0];
-      pump.lastTriggeredMinute = "";
       persistTimers();
+      pushScheduleToEsp(pump);
       renderPumps();
     }
 
-    function updateClockAndTimers() {
+    function updateClock() {
       const now = new Date();
       const dayNamesVi = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
-      const dayOfWeek = now.getDay();
       const hh = String(now.getHours()).padStart(2, "0");
       const mm = String(now.getMinutes()).padStart(2, "0");
       const ss = String(now.getSeconds()).padStart(2, "0");
-      const currentHHMM = `${hh}:${mm}`;
-      const minuteKey = `${now.toDateString()}_${currentHHMM}`;
-
-      liveClockEl.textContent = `${dayNamesVi[dayOfWeek]} • ${hh}:${mm}:${ss}`;
-
-      // Nếu đang báo ONLINE mà quá 35 giây không có dữ liệu/tin nhắn nào từ ESP32 thì báo OFFLINE
-      if (isConnected && isEspOnline && lastEspSeenMs > 0 && (Date.now() - lastEspSeenMs > 35000)) {
-        isEspOnline = false;
-        renderEspStatus();
-      }
-
-      if (!isConnected) return;
-
-      PUMPS.forEach((p) => {
-        if (p.lastTriggeredMinute === minuteKey) return;
-        const allowedToday = !p.days || p.days.length === 0 || p.days.includes(dayOfWeek);
-        if (!allowedToday) return;
-
-        if (p.onTime && p.onTime === currentHHMM) {
-          p.lastTriggeredMinute = minuteKey;
-          sendPumpCmd(p.id, "ON");
-        } else if (p.offTime && p.offTime === currentHHMM) {
-          p.lastTriggeredMinute = minuteKey;
-          sendPumpCmd(p.id, "OFF");
-        }
-      });
+      liveClockEl.textContent = `${dayNamesVi[now.getDay()]} • ${hh}:${mm}:${ss}`;
     }
 
-    setInterval(updateClockAndTimers, 1000);
-    updateClockAndTimers();
+    setInterval(updateClock, 1000);
+    updateClock();
   </script>
 </body>
 </html>
